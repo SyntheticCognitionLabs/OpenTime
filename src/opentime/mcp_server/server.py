@@ -228,6 +228,45 @@ def stats_all(ctx: Context) -> dict:
     return {"summaries": [_summary_to_dict(s) for s in summaries]}
 
 
+@mcp.tool()
+def stats_recommend_timeout(
+    task_type: str, ctx: Context, percentile: float = 0.95, safety_margin: float = 1.2,
+) -> dict:
+    """Recommend a timeout for a task type based on historical durations.
+    Uses the given percentile (default p95) with a safety margin (default 20% buffer)."""
+    app = _ctx(ctx)
+    result = app.stats.recommend_timeout(task_type, percentile=percentile, safety_margin=safety_margin)
+    if result is None:
+        return {"recommendation": None, "message": f"No completed tasks found for type '{task_type}'"}
+    return {"recommendation": result}
+
+
+@mcp.tool()
+def stats_check_timeout(
+    task_type: str, elapsed_seconds: float, timeout_seconds: float, ctx: Context,
+) -> dict:
+    """Check if a running task is at risk of exceeding its timeout, based on historical durations."""
+    app = _ctx(ctx)
+    result = app.stats.check_timeout_risk(task_type, elapsed_seconds, timeout_seconds)
+    if result is None:
+        return {"risk": None, "message": f"No completed tasks found for type '{task_type}'"}
+    return {"risk": result}
+
+
+@mcp.tool()
+def stats_compare_approaches(approaches: str, ctx: Context) -> dict:
+    """Compare multiple approaches to find the fastest based on your historical task durations.
+
+    Pass approaches as a JSON string: a list of objects, each with "name" (string) and
+    "steps" (list of {"task_type": string, "estimated_seconds": number}).
+
+    Steps with historical data get their estimates replaced with your actual median duration.
+    Returns approaches ranked fastest-first with a recommendation."""
+    app = _ctx(ctx)
+    parsed = json.loads(approaches)
+    return app.stats.compare_approaches(parsed)
+
+
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 

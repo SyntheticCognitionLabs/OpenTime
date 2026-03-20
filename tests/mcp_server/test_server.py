@@ -19,8 +19,11 @@ from opentime.mcp_server.server import (
     event_task_end,
     event_task_start,
     stats_all,
+    stats_check_timeout,
+    stats_compare_approaches,
     stats_duration,
     stats_list_task_types,
+    stats_recommend_timeout,
     stopwatch_delete,
     stopwatch_list,
     stopwatch_start,
@@ -177,3 +180,59 @@ def test_event_record_dict_metadata(mock_ctx):
     # Simulate what happens when MCP client sends a dict
     result = event_record("test", mock_ctx, metadata='{"key": "value"}')
     assert result["event"]["metadata"] == '{"key": "value"}'
+
+
+def test_stats_recommend_timeout(mock_ctx):
+    # Record some task pairs (durations will be ~0s since start/end are near-instant)
+    for _ in range(5):
+        start = event_task_start("coding", mock_ctx)
+        event_task_end("coding", mock_ctx, correlation_id=start["correlation_id"])
+
+    result = stats_recommend_timeout("coding", mock_ctx)
+    assert result["recommendation"] is not None
+    assert result["recommendation"]["sample_count"] == 5
+    assert result["recommendation"]["recommended_seconds"] >= 0
+
+
+def test_stats_recommend_timeout_no_data(mock_ctx):
+    result = stats_recommend_timeout("nonexistent", mock_ctx)
+    assert result["recommendation"] is None
+
+
+def test_stats_check_timeout(mock_ctx):
+    for _ in range(3):
+        start = event_task_start("coding", mock_ctx)
+        event_task_end("coding", mock_ctx, correlation_id=start["correlation_id"])
+
+    result = stats_check_timeout("coding", 5.0, 60.0, mock_ctx)
+    assert result["risk"] is not None
+    assert result["risk"]["elapsed_seconds"] == 5.0
+    assert result["risk"]["timeout_seconds"] == 60.0
+    assert "at_risk" in result["risk"]
+
+
+def test_stats_check_timeout_no_data(mock_ctx):
+    result = stats_check_timeout("nonexistent", 5.0, 60.0, mock_ctx)
+    assert result["risk"] is None
+
+
+def test_stats_compare_approaches(mock_ctx):
+    import json
+
+    # Record some task pairs for "coding"
+    for _ in range(3):
+        start = event_task_start("coding", mock_ctx)
+        event_task_end("coding", mock_ctx, correlation_id=start["correlation_id"])
+
+    approaches = json.dumps([
+        {"name": "A", "steps": [{"task_type": "coding", "estimated_seconds": 3600}]},
+        {"name": "B", "steps": [{"task_type": "unknown", "estimated_seconds": 100}]},
+    ])
+
+    result = stats_compare_approaches(approaches, mock_ctx)
+    assert len(result["approaches"]) == 2
+    assert result["recommendation"] is not None
+
+    # The approach with "coding" should have historical data
+    approach_a = next(a for a in result["approaches"] if a["name"] == "A")
+    assert approach_a["steps"][0]["has_historical_data"] is True

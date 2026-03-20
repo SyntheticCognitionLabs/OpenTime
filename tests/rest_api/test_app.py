@@ -188,3 +188,77 @@ def test_event_create_dict_metadata(client):
     resp = client.post("/events", json={"event_type": "test", "metadata": {"key": "value"}})
     assert resp.status_code == 200
     assert resp.json()["event"]["metadata"] == '{"key": "value"}'
+
+
+def _create_task_pairs(client, task_type, count):
+    """Helper: create count start/end pairs."""
+    for _ in range(count):
+        start = client.post("/events/task-start", json={"task_type": task_type})
+        cid = start.json()["correlation_id"]
+        client.post("/events/task-end", json={"task_type": task_type, "correlation_id": cid})
+
+
+def test_recommend_timeout(client):
+    _create_task_pairs(client, "coding", 5)
+
+    resp = client.get("/stats/recommend-timeout/coding")
+    assert resp.status_code == 200
+    rec = resp.json()["recommendation"]
+    assert rec["sample_count"] == 5
+    assert rec["recommended_seconds"] > 0
+
+
+def test_recommend_timeout_custom_params(client):
+    _create_task_pairs(client, "coding", 5)
+
+    resp = client.get("/stats/recommend-timeout/coding", params={"percentile": 0.5, "safety_margin": 1.5})
+    assert resp.status_code == 200
+    assert resp.json()["recommendation"]["percentile"] == 0.5
+    assert resp.json()["recommendation"]["safety_margin"] == 1.5
+
+
+def test_recommend_timeout_no_data(client):
+    resp = client.get("/stats/recommend-timeout/nonexistent")
+    assert resp.status_code == 404
+
+
+def test_check_timeout(client):
+    _create_task_pairs(client, "coding", 5)
+
+    resp = client.get("/stats/check-timeout/coding", params={"elapsed_seconds": 5.0, "timeout_seconds": 60.0})
+    assert resp.status_code == 200
+    risk = resp.json()["risk"]
+    assert risk["elapsed_seconds"] == 5.0
+    assert risk["timeout_seconds"] == 60.0
+    assert "at_risk" in risk
+
+
+def test_check_timeout_no_data(client):
+    resp = client.get("/stats/check-timeout/nonexistent", params={"elapsed_seconds": 5.0, "timeout_seconds": 60.0})
+    assert resp.status_code == 404
+
+
+def test_compare_approaches(client):
+    _create_task_pairs(client, "coding", 5)
+
+    resp = client.post("/stats/compare-approaches", json={
+        "approaches": [
+            {"name": "A", "steps": [{"task_type": "coding", "estimated_seconds": 3600}]},
+            {"name": "B", "steps": [{"task_type": "unknown", "estimated_seconds": 100}]},
+        ],
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["approaches"]) == 2
+    assert data["recommendation"] is not None
+
+    # B (100s unknown) should be fastest since coding durations are near-zero in tests
+    # but A's coding has historical data
+    approach_a = next(a for a in data["approaches"] if a["name"] == "A")
+    assert approach_a["steps"][0]["has_historical_data"] is True
+
+
+def test_compare_approaches_empty(client):
+    resp = client.post("/stats/compare-approaches", json={"approaches": []})
+    assert resp.status_code == 200
+    assert resp.json()["approaches"] == []

@@ -43,6 +43,20 @@ class TaskEndRequest(BaseModel):
     metadata: str | dict | None = None
 
 
+class ApproachStep(BaseModel):
+    task_type: str
+    estimated_seconds: float
+
+
+class Approach(BaseModel):
+    name: str
+    steps: list[ApproachStep]
+
+
+class CompareApproachesRequest(BaseModel):
+    approaches: list[Approach]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _clock, _events, _stats, _conn
@@ -214,6 +228,36 @@ def api_stats_task_types():
 def api_stats_all():
     summaries = _stats.summarize_all()
     return {"summaries": [_summary_to_dict(s) for s in summaries]}
+
+
+@app.get("/stats/recommend-timeout/{task_type}")
+def api_stats_recommend_timeout(
+    task_type: str,
+    percentile: float = Query(0.95, ge=0.0, le=1.0),
+    safety_margin: float = Query(1.2, ge=1.0),
+):
+    result = _stats.recommend_timeout(task_type, percentile=percentile, safety_margin=safety_margin)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No completed tasks found for type '{task_type}'")
+    return {"recommendation": result}
+
+
+@app.get("/stats/check-timeout/{task_type}")
+def api_stats_check_timeout(
+    task_type: str,
+    elapsed_seconds: float = Query(..., ge=0.0),
+    timeout_seconds: float = Query(..., gt=0.0),
+):
+    result = _stats.check_timeout_risk(task_type, elapsed_seconds, timeout_seconds)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No completed tasks found for type '{task_type}'")
+    return {"risk": result}
+
+
+@app.post("/stats/compare-approaches")
+def api_stats_compare_approaches(req: CompareApproachesRequest):
+    approaches = [a.model_dump() for a in req.approaches]
+    return _stats.compare_approaches(approaches)
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
