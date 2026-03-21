@@ -15,11 +15,12 @@ OpenTime is an open-source Python framework that gives AI agents temporal awaren
 python3 -m venv .venv && .venv/bin/pip install -e ".[all]"
 
 # Tests
-.venv/bin/pytest                          # full suite (102 tests)
+.venv/bin/pytest                          # full suite (109 tests)
 .venv/bin/pytest tests/core/ -v           # core logic only
 .venv/bin/pytest tests/db/ -v             # database layer only
 .venv/bin/pytest tests/mcp_server/ -v     # MCP server tools
 .venv/bin/pytest tests/rest_api/ -v       # REST API endpoints
+.venv/bin/pytest tests/hooks/ -v          # hooks integration
 .venv/bin/pytest tests/core/test_clock.py::test_stopwatch_start_stop  # single test
 
 # Lint
@@ -48,6 +49,7 @@ MCP Server / REST API        ← thin wrappers, no business logic
 - **DB layer** (`src/opentime/db/`) handles SQLite schema, connections, migrations, and parameterized queries
 - **MCP server** (`src/opentime/mcp_server/server.py`) exposes 21 tools via FastMCP with lifespan-managed state
 - **REST API** (`src/opentime/rest_api/app.py`) mirrors MCP tools as FastAPI endpoints
+- **Hooks** (`src/opentime/hooks/claude_code.py`) provides passive tracking for Claude Code via PreToolUse/PostToolUse/Stop hooks
 - Both integration layers instantiate the same core service objects — core never imports from mcp_server or rest_api
 
 ## MCP Tools (21 total)
