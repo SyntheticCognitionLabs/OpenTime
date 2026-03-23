@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from opentime import __version__
@@ -129,6 +130,14 @@ def _summary_to_dict(s) -> dict:
 @app.get("/health")
 def health():
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    """Web dashboard for viewing agent activity and statistics."""
+    from opentime.rest_api.dashboard import DASHBOARD_HTML
+
+    return DASHBOARD_HTML
 
 
 # ── Agents ───────────────────────────────────────────────────────────────────

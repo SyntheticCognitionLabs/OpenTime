@@ -33,6 +33,14 @@ def test_health(client):
     assert "version" in data
 
 
+def test_dashboard(client):
+    resp = client.get("/dashboard")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "OpenTime" in resp.text
+    assert "agent-select" in resp.text
+
+
 def test_clock_now(client):
     resp = client.get("/clock/now")
     assert resp.status_code == 200
