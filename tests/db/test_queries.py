@@ -149,3 +149,56 @@ def test_select_active_tasks(db_conn):
     assert len(active_coding) == 1
     active_all = queries.select_active_tasks(db_conn, "agent-a")
     assert len(active_all) == 2
+
+
+# ── Cross-agent query tests ─────────────────────────────────────────────────
+
+
+def test_select_events_cross_agent(db_conn):
+    """agent_id=None returns events from all agents."""
+    queries.insert_event(db_conn, "e1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None)
+    queries.insert_event(db_conn, "e2", "agent-b", "task_start", "coding", "2026-01-01T00:01:00+00:00", None)
+
+    # Per-agent
+    assert len(queries.select_events(db_conn, "agent-a")) == 1
+
+    # Cross-agent
+    all_events = queries.select_events(db_conn, None)
+    assert len(all_events) == 2
+
+
+def test_compute_task_durations_cross_agent(db_conn):
+    """agent_id=None computes durations across all agents."""
+    queries.insert_event(db_conn, "s1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-a")
+    queries.insert_event(db_conn, "e1", "agent-a", "task_end", "coding", "2026-01-01T00:00:10+00:00", None, "cid-a")
+    queries.insert_event(db_conn, "s2", "agent-b", "task_start", "coding", "2026-01-01T00:01:00+00:00", None, "cid-b")
+    queries.insert_event(db_conn, "e2", "agent-b", "task_end", "coding", "2026-01-01T00:01:20+00:00", None, "cid-b")
+
+    # Per-agent
+    assert len(queries.compute_task_durations(db_conn, "agent-a", "coding")) == 1
+
+    # Cross-agent
+    durations = queries.compute_task_durations(db_conn, None, "coding")
+    assert len(durations) == 2
+    assert sorted(durations) == [10.0, 20.0]
+
+
+def test_distinct_task_types_cross_agent(db_conn):
+    queries.insert_event(db_conn, "e1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None)
+    queries.insert_event(db_conn, "e2", "agent-b", "task_start", "testing", "2026-01-01T00:01:00+00:00", None)
+
+    # Per-agent
+    assert queries.distinct_task_types(db_conn, "agent-a") == ["coding"]
+
+    # Cross-agent
+    types = queries.distinct_task_types(db_conn, None)
+    assert set(types) == {"coding", "testing"}
+
+
+def test_distinct_agents(db_conn):
+    queries.insert_event(db_conn, "e1", "agent-a", "test", None, "2026-01-01T00:00:00+00:00", None)
+    queries.insert_event(db_conn, "e2", "agent-b", "test", None, "2026-01-01T00:01:00+00:00", None)
+    queries.insert_event(db_conn, "e3", "agent-c", "test", None, "2026-01-01T00:02:00+00:00", None)
+
+    agents = queries.distinct_agents(db_conn)
+    assert agents == ["agent-a", "agent-b", "agent-c"]

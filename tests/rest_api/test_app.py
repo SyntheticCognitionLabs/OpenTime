@@ -4,8 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from opentime.core.clock import ClockService
-from opentime.core.events import EventTracker
-from opentime.core.stats import DurationStats
 from opentime.db.connection import open_database
 from opentime.rest_api import app as app_module
 from opentime.rest_api.app import app
@@ -16,9 +14,8 @@ def setup_app_state():
     """Initialize module-level state used by the REST API endpoints."""
     conn = open_database(None)
     app_module._clock = ClockService()
-    app_module._events = EventTracker(conn, "rest-test-agent")
-    app_module._stats = DurationStats(conn, "rest-test-agent")
     app_module._conn = conn
+    app_module._default_agent_id = "rest-test-agent"
     yield
     conn.close()
 
@@ -262,3 +259,99 @@ def test_compare_approaches_empty(client):
     resp = client.post("/stats/compare-approaches", json={"approaches": []})
     assert resp.status_code == 200
     assert resp.json()["approaches"] == []
+
+
+# ── Multi-agent tests ────────────────────────────────────────────────────────
+
+
+def test_x_agent_id_header(client):
+    """Events are recorded under the agent specified by X-Agent-ID header."""
+    client.post(
+        "/events/task-start",
+        json={"task_type": "coding"},
+        headers={"X-Agent-ID": "agent-alice"},
+    )
+    client.post(
+        "/events/task-start",
+        json={"task_type": "coding"},
+        headers={"X-Agent-ID": "agent-bob"},
+    )
+
+    # Each agent sees only their own events
+    resp = client.get("/events", headers={"X-Agent-ID": "agent-alice"})
+    assert len(resp.json()["events"]) == 1
+
+    resp = client.get("/events", headers={"X-Agent-ID": "agent-bob"})
+    assert len(resp.json()["events"]) == 1
+
+
+def test_default_agent_id_without_header(client):
+    """Without X-Agent-ID header, uses the default agent_id from env var."""
+    client.post("/events/task-start", json={"task_type": "coding"})
+
+    resp = client.get("/events", headers={"X-Agent-ID": "rest-test-agent"})
+    assert len(resp.json()["events"]) == 1
+
+
+def test_list_agents(client):
+    client.post("/events", json={"event_type": "test"}, headers={"X-Agent-ID": "agent-a"})
+    client.post("/events", json={"event_type": "test"}, headers={"X-Agent-ID": "agent-b"})
+    client.post("/events", json={"event_type": "test"}, headers={"X-Agent-ID": "agent-c"})
+
+    resp = client.get("/agents")
+    assert resp.status_code == 200
+    agents = resp.json()["agents"]
+    assert set(agents) >= {"agent-a", "agent-b", "agent-c"}
+
+
+def test_cross_agent_stats(client):
+    """agent_id=* returns stats aggregated across all agents."""
+    # Agent A: coding takes 10s
+    start = client.post("/events/task-start", json={"task_type": "coding"}, headers={"X-Agent-ID": "agent-a"})
+    cid = start.json()["correlation_id"]
+    client.post(
+        "/events/task-end", json={"task_type": "coding", "correlation_id": cid},
+        headers={"X-Agent-ID": "agent-a"},
+    )
+
+    # Agent B: coding takes ~0s (same task type, different agent)
+    start = client.post("/events/task-start", json={"task_type": "coding"}, headers={"X-Agent-ID": "agent-b"})
+    cid = start.json()["correlation_id"]
+    client.post(
+        "/events/task-end", json={"task_type": "coding", "correlation_id": cid},
+        headers={"X-Agent-ID": "agent-b"},
+    )
+
+    # Cross-agent stats should include both
+    resp = client.get("/stats/durations/coding", params={"agent_id": "*"})
+    assert resp.status_code == 200
+    assert resp.json()["summary"]["count"] == 2
+
+    # Per-agent stats should include only one
+    resp = client.get("/stats/durations/coding", params={"agent_id": "agent-a"})
+    assert resp.status_code == 200
+    assert resp.json()["summary"]["count"] == 1
+
+
+def test_cross_agent_task_types(client):
+    client.post("/events/task-start", json={"task_type": "coding"}, headers={"X-Agent-ID": "agent-a"})
+    client.post("/events/task-start", json={"task_type": "testing"}, headers={"X-Agent-ID": "agent-b"})
+
+    resp = client.get("/stats/task-types", params={"agent_id": "*"})
+    assert resp.status_code == 200
+    assert set(resp.json()["task_types"]) >= {"coding", "testing"}
+
+
+def test_cross_agent_recommend_timeout(client):
+    """Timeout recommendation works with agent_id=*."""
+    for agent in ["agent-a", "agent-b"]:
+        start = client.post("/events/task-start", json={"task_type": "coding"}, headers={"X-Agent-ID": agent})
+        cid = start.json()["correlation_id"]
+        client.post(
+            "/events/task-end", json={"task_type": "coding", "correlation_id": cid},
+            headers={"X-Agent-ID": agent},
+        )
+
+    resp = client.get("/stats/recommend-timeout/coding", params={"agent_id": "*"})
+    assert resp.status_code == 200
+    assert resp.json()["recommendation"]["sample_count"] == 2
