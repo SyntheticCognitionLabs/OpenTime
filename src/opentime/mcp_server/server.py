@@ -39,8 +39,13 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 mcp = FastMCP(
     "OpenTime",
     instructions=(
-        "OpenTime gives you temporal awareness. Use these tools to track time, "
-        "record task events, and understand how long tasks actually take you."
+        "OpenTime gives you temporal awareness. Use these tools PROACTIVELY on every task:\n"
+        "1. Call event_task_start at the beginning of every task — save the correlation_id.\n"
+        "2. Call event_task_end when done — pass the correlation_id to pair start/end.\n"
+        "3. Before setting timeouts, call stats_recommend_timeout for a data-driven value.\n"
+        "4. When choosing between approaches, call stats_compare_approaches.\n"
+        "5. Use consistent task_type names (e.g. 'code_generation', 'debugging', 'test_run').\n"
+        "Do NOT wait to be asked — track time automatically on all tasks."
     ),
     lifespan=app_lifespan,
 )

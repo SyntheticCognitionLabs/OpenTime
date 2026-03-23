@@ -219,6 +219,34 @@ http://localhost:8080/openapi.json
 
 Use it with ChatGPT custom GPT actions, AutoGPT, CrewAI, or any framework with OpenAPI tool discovery.
 
+## Agent Prompt Templates
+
+For agents to use OpenTime proactively (without being asked), add the OpenTime instructions to your agent's system prompt:
+
+```python
+from opentime.prompts import get_system_prompt
+
+# For MCP-connected agents (Claude Code, Cursor, etc.)
+prompt = get_system_prompt("mcp")
+
+# For OpenAI function calling or Gemini
+prompt = get_system_prompt("openai")
+
+# For agents calling the REST API directly
+prompt = get_system_prompt("rest_api", base_url="http://localhost:8080")
+
+# Append to your agent's system prompt
+system_prompt = f"You are a helpful assistant.\n\n{prompt}"
+```
+
+The prompts instruct the agent to:
+- Track every task with `task_start` / `task_end` and correlation IDs
+- Check `recommend_timeout` before setting any timeout or deadline
+- Use `compare_approaches` when choosing between methods
+- Use consistent `task_type` names for accurate statistics
+
+Available modes: `"mcp"`, `"function_calling"`, `"openai"`, `"gemini"`, `"rest_api"`, `"rest"`
+
 ## MCP Tools Reference
 
 **Clock** (2 tools)
