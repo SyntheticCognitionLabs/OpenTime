@@ -42,13 +42,16 @@ pip install opentime[rest]
 
 ## Integration Options
 
-OpenTime works with any AI agent through four interfaces:
+OpenTime works with any AI agent through multiple interfaces:
 
 | Interface | Best For | Requires Agent Awareness? |
 |-----------|----------|--------------------------|
 | **MCP Server** | Claude Code, Claude Desktop, Cursor, Windsurf, Cline | Yes (agent calls tools) |
-| **REST API** | ChatGPT, Gemini, LangChain, custom agents | Yes (agent calls endpoints) |
+| **REST API** | Custom agents, any HTTP client | Yes (agent calls endpoints) |
 | **Docker** | Any environment — no Python install needed | Yes (agent calls endpoints) |
+| **LangChain** | LangChain / LangGraph agents | Yes (native tools) |
+| **OpenAI / Gemini** | GPT-4, Assistants, Gemini function calling | Yes (function schemas) |
+| **OpenAPI Spec** | Any framework with OpenAPI support | Yes (auto-discovered) |
 | **Hooks** | Claude Code passive tracking | No (fully automatic) |
 
 ### Option 1: MCP Server
@@ -165,6 +168,56 @@ print(stats.summarize("tool:Bash"))
 # How long do file edits take?
 print(stats.summarize("tool:Edit"))
 ```
+
+### Option 5: LangChain Integration
+
+For LangChain / LangGraph agents:
+
+```bash
+pip install opentime[langchain]
+```
+
+```python
+from opentime.integrations.langchain import get_opentime_tools
+
+tools = get_opentime_tools()  # base_url defaults to http://localhost:8080
+agent = create_react_agent(llm, tools)
+```
+
+Provides 8 LangChain-compatible tools with full `args_schema` for structured tool calling. Start the REST API server first (`opentime-rest` or `docker compose up -d`).
+
+### Option 6: OpenAI / Gemini Function Calling
+
+For OpenAI GPT-4, Assistants API, or Google Gemini — zero additional dependencies:
+
+```python
+import json
+from opentime.integrations.openai_schema import get_opentime_functions, handle_function_call
+
+# Pass function schemas to the model
+response = openai.chat.completions.create(
+    model="gpt-4o",
+    messages=messages,
+    tools=get_opentime_functions(),
+)
+
+# Dispatch function calls to the OpenTime REST API
+for tool_call in response.choices[0].message.tool_calls:
+    result = handle_function_call(
+        tool_call.function.name,
+        json.loads(tool_call.function.arguments),
+    )
+```
+
+### Option 7: OpenAPI Spec (Universal)
+
+Any framework that supports OpenAPI can auto-discover all endpoints:
+
+```
+http://localhost:8080/openapi.json
+```
+
+Use it with ChatGPT custom GPT actions, AutoGPT, CrewAI, or any framework with OpenAPI tool discovery.
 
 ## MCP Tools Reference
 
