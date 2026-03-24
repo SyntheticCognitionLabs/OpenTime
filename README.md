@@ -5,6 +5,9 @@
 [![PyPI version](https://badge.fury.io/py/opentime.svg)](https://pypi.org/project/opentime/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Docs](https://img.shields.io/badge/docs-syntheticcognitionlabs.github.io-blue)](https://syntheticcognitionlabs.github.io/OpenTime/)
+
+**[Documentation](https://syntheticcognitionlabs.github.io/OpenTime/)** | **[PyPI](https://pypi.org/project/opentime/)** | **[GitHub](https://github.com/SyntheticCognitionLabs/OpenTime)**
 
 ---
 
